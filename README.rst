@@ -15,5 +15,5 @@ inotify
 用法
 ~~~~~~
 
-watchfs 被监控的目录 快盘挂载的目录
+./kuaipan_syncer_x64 被监控的目录 快盘挂载的目录
 
