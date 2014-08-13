@@ -1,4 +1,4 @@
-package consts
+package watchfs
 
 import (
     inotify "code.google.com/p/go.exp/inotify"

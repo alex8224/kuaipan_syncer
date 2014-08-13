@@ -4,8 +4,9 @@ import (
     "os"
     "log"
     "fmt"
-    "fileop"
-    "consts"
+    "watchfs"
+//    "fileop"
+ //   "consts"
     "path/filepath"
     "strings"
     inotify "code.google.com/p/go.exp/inotify"
@@ -39,19 +40,19 @@ func dosynctask(queue chan *Event, exitchannel chan int) {
                     case inotify.IN_CLOSE_WRITE:
                         fallthrough
                     case inotify.IN_MOVED_TO:
-                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_FILE)
+                        fileop := watchfs.NewFileop(evt.src, watchdir, syncdir, watchfs.TYPE_FILE)
                         wrapper(evt.src, fileop.Createfile)
-                    case consts.IN_MOVED_DIR_FROM:
+                    case watchfs.IN_MOVED_DIR_FROM:
                         fallthrough
-                    case consts.IN_DELETE_DIR:
-                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_DIR)
+                    case watchfs.IN_DELETE_DIR:
+                        fileop := watchfs.NewFileop(evt.src, watchdir, syncdir, watchfs.TYPE_DIR)
                         fileop.Removefile()
                     case inotify.IN_MOVED_FROM:
                         fallthrough
                     case inotify.IN_DELETE:
-                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_FILE)
+                        fileop := watchfs.NewFileop(evt.src, watchdir, syncdir, watchfs.TYPE_FILE)
                         wrapper(evt.src, fileop.Removefile)
-                    case consts.IN_MOVED_DIR_TO:
+                    case watchfs.IN_MOVED_DIR_TO:
                         log.Println("move to dir", evt.src)
                         filepath.Walk(evt.src, func(pathname string , file os.FileInfo, err error) error {
                             if err !=nil {
@@ -59,7 +60,7 @@ func dosynctask(queue chan *Event, exitchannel chan int) {
                             }
 
                             if !file.IsDir() {
-                                fileop := fileop.New(pathname, watchdir, syncdir, consts.TYPE_FILE)
+                                fileop := watchfs.NewFileop(pathname, watchdir, syncdir, watchfs.TYPE_FILE)
                                 wrapper(pathname, fileop.Createfile)
                             }
                             return nil
@@ -91,7 +92,7 @@ func addwatch(pathname string, watcher *inotify.Watcher) {
         }
 
         if file.IsDir() {
-            if err := watcher.AddWatch(path, consts.MASK); err != nil {
+            if err := watcher.AddWatch(path,watchfs.MASK); err != nil {
                 log.Printf("watch %s failed!\n", path)
             }else {
                 log.Printf("watch dir %s \n", path)
@@ -145,7 +146,7 @@ func main() {
         select {
             case ev := <-watcher.Event:
                 switch ev.Mask {
-                    case consts.IN_CREATE_DIR:
+                    case watchfs.IN_CREATE_DIR:
                         addwatch(ev.Name, watcher)
                 }
                 send(queue, ev.Mask, ev.Name)
