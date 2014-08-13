@@ -12,10 +12,13 @@ import (
 
 const (
     QUIT = 100
-    IN_CREATE = 200
-    IN_DELETE = 300
-    IN_CLOSE_WRITE = 400
-    IN_MOVE_TO = 500
+    IN_CREATE_DIR = inotify.IN_ISDIR | inotify.IN_CREATE
+    IN_DELETE_DIR = inotify.IN_ISDIR | inotify.IN_DELETE
+    MASK = IN_CREATE_DIR | IN_DELETE_DIR | inotify.IN_CREATE | inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_MOVED_FROM | inotify.IN_DELETE
+    IN_MOVED_DIR_FROM = inotify.IN_ISDIR | inotify.IN_MOVED_FROM
+    IN_MOVED_DIR_TO = inotify.IN_ISDIR | inotify.IN_MOVED_TO
+    TYPE_FILE = 200
+    TYPE_DIR = 300
 )
 
 var (
@@ -31,6 +34,7 @@ type Event struct {
 type Fileop struct {
     srcfile string
     destfile string
+    filetype int
 }
 
 func (self *Fileop) tobytearray(src string) []byte {
@@ -59,9 +63,15 @@ func (self *Fileop) createfile() {
 
 func (self *Fileop) removefile() {
     self.destfile = filepath.Join(syncdir, string(self.tobytearray(self.srcfile)[len(watchdir):]))
-    Popen("rm", "-f", self.destfile)
-    log.Printf("delete old file:%s ok\n", self.destfile)
+    if self.filetype == TYPE_FILE {
+        Popen("rm", "-f", self.destfile)
+        log.Printf("delete old file:%s ok\n", self.destfile)
+    }else {
+        Popen("rmdir", self.destfile)
+        log.Printf("delete old dir:%s ok\n", self.destfile)
+    }
 }
+
 
 func (op *Fileop) exists(src string) bool {
     _, err := os.Stat(src)
@@ -97,10 +107,35 @@ func dosynctask(queue chan *Event, exitchannel chan int) {
                         fileop := new(Fileop)
                         fileop.srcfile = evt.src
                         wrapper(evt.src, fileop.createfile)
+                    case IN_MOVED_DIR_FROM:
+                        fallthrough
+                    case IN_DELETE_DIR:
+                        fileop := new(Fileop)
+                        fileop.srcfile = evt.src
+                        fileop.filetype = TYPE_DIR
+                        fileop.removefile()
+                    case inotify.IN_MOVED_FROM:
+                        fallthrough
                     case inotify.IN_DELETE:
                         fileop := new(Fileop)
                         fileop.srcfile = evt.src
+                        fileop.filetype = TYPE_FILE
                         wrapper(evt.src, fileop.removefile)
+                    case IN_MOVED_DIR_TO:
+                        log.Println("move to dir", evt.src)
+                        filepath.Walk(evt.src, func(pathname string , file os.FileInfo, err error) error {
+                            if err !=nil {
+                                return err 
+                            }
+
+                            if !file.IsDir() {
+                                fileop := new(Fileop)
+                                fileop.srcfile = pathname
+                                fileop.filetype = TYPE_FILE
+                                wrapper(pathname, fileop.createfile)
+                            }
+                            return nil
+                        })
                 }
             case exitcode := <- exitchannel:
                 log.Println("exit do sync task", exitcode)
@@ -114,6 +149,36 @@ func send(queue chan *Event, typecode uint32, pathname string) {
     event.typecode = typecode
     event.src = pathname
     queue <- event
+}
+
+func addwatch(pathname string, watcher *inotify.Watcher) {
+    filepath.Walk(pathname, func(path string, file os.FileInfo, err error) error {
+        if file == nil {
+            return err
+        }
+
+        if err != nil {
+            log.Printf("watch file %s failed, reason:%v\n", path, err)
+            return err
+        }
+
+        if file.IsDir() {
+            if err := watcher.AddWatch(path, MASK); err != nil {
+                log.Printf("watch %s failed!\n", path)
+            }else {
+                log.Printf("watch dir %s \n", path)
+            }
+        }
+        return nil
+    })
+}
+
+func removewatch(pathname string, watcher *inotify.Watcher) {
+    if err := watcher.RemoveWatch(pathname); err != nil {
+        log.Printf("remove watch %s failed! the reason is:%v\n", pathname, err) 
+    }else{
+        log.Printf("remove watch %s ok!\n", pathname)
+    }
 }
 
 func init() {
@@ -132,26 +197,7 @@ func main() {
         log.Fatal(err)
     }
 
-    mask := inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_DELETE
-    filepath.Walk(watchdir, func(path string, file os.FileInfo, err error) error {
-        if file == nil {
-            return err
-        }
-
-        if err != nil {
-            log.Printf("watch file %s failed, reason:%v\n", path, err)
-            return err
-        }
-
-        if file.IsDir() {
-            if err := watcher.AddWatch(path, mask); err != nil {
-                log.Printf("watch %s failed!\n", path)
-            }else {
-                log.Printf("watch dir %s \n", path)
-            }
-        }
-        return nil
-    })
+    addwatch(watchdir, watcher)
 
     if err != nil {
         log.Fatal(err)
@@ -165,10 +211,15 @@ func main() {
 
     for {
         if exitflag == true {
+            watcher.Close()
             break
         }
         select {
             case ev := <- watcher.Event:
+                switch ev.Mask {
+                    case IN_CREATE_DIR:
+                        addwatch(ev.Name, watcher)
+                }
                 send(queue, ev.Mask, ev.Name)
             case err := <- watcher.Error:
                 log.Println("error:", err)
