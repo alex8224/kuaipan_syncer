@@ -39,28 +39,17 @@ func dosynctask(queue chan *Event, exitchannel chan int) {
                     case inotify.IN_CLOSE_WRITE:
                         fallthrough
                     case inotify.IN_MOVED_TO:
-                        fileop := fileop.New()
-                        fileop.Srcfile = evt.src
-                        fileop.Watchdir = watchdir
-                        fileop.Syncdir = syncdir
+                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_FILE)
                         wrapper(evt.src, fileop.Createfile)
                     case consts.IN_MOVED_DIR_FROM:
                         fallthrough
                     case consts.IN_DELETE_DIR:
-                        fileop := fileop.New()
-                        fileop.Srcfile = evt.src
-                        fileop.Watchdir = watchdir
-                        fileop.Syncdir = syncdir
-                        fileop.Filetype = consts.TYPE_DIR
+                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_DIR)
                         fileop.Removefile()
                     case inotify.IN_MOVED_FROM:
                         fallthrough
                     case inotify.IN_DELETE:
-                        fileop := fileop.New()
-                        fileop.Srcfile = evt.src
-                        fileop.Watchdir = watchdir
-                        fileop.Syncdir = syncdir
-                        fileop.Filetype = consts.TYPE_FILE
+                        fileop := fileop.New(evt.src, watchdir, syncdir, consts.TYPE_FILE)
                         wrapper(evt.src, fileop.Removefile)
                     case consts.IN_MOVED_DIR_TO:
                         log.Println("move to dir", evt.src)
@@ -70,11 +59,7 @@ func dosynctask(queue chan *Event, exitchannel chan int) {
                             }
 
                             if !file.IsDir() {
-                                fileop := fileop.New()
-                                fileop.Srcfile = pathname
-                                fileop.Watchdir = watchdir
-                                fileop.Syncdir = syncdir
-                                fileop.Filetype = consts.TYPE_FILE
+                                fileop := fileop.New(pathname, watchdir, syncdir, consts.TYPE_FILE)
                                 wrapper(pathname, fileop.Createfile)
                             }
                             return nil

@@ -66,6 +66,11 @@ func (op *Fileop) exists(src string) bool {
     return err == nil || os.IsExist(err)
 }
 
-func New() (fileop *Fileop) {
-    return new(Fileop)
+func New(src, watchdir, syncdir string, filetype int) (fileop *Fileop) {
+    fileop = new(Fileop)
+    fileop.Srcfile = src
+    fileop.Watchdir = watchdir
+    fileop.Syncdir = syncdir
+    fileop.Filetype = filetype
+    return fileop
 }
