@@ -5,8 +5,6 @@ import (
     "log"
     "fmt"
     "watchfs"
-//    "fileop"
- //   "consts"
     "path/filepath"
     "strings"
     inotify "code.google.com/p/go.exp/inotify"

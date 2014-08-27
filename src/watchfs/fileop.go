@@ -5,8 +5,8 @@ import (
     "log"
     "os/exec"
     "strings"
-//    "consts"
     "path/filepath"
+    "bytes"
 )
 
 type Fileop struct {
@@ -17,14 +17,50 @@ type Fileop struct {
     syncdir string
 }
 
-func Popen(cmd string,  arg ...string) {
-    commander := exec.Command(cmd, arg...)
-    err := commander.Run()
-    if err != nil {
-        log.Printf("Popen failed, cmd: %s \n", cmd + " " + strings.Join(arg, ""))
+type StringBuffer struct {
+    strbuff *bytes.Buffer
+}
+
+func (self *StringBuffer) init() {
+    if self.strbuff == nil {
+        self.strbuff = new(bytes.Buffer)
     }
 }
 
+func (self *StringBuffer) Append(str string) *StringBuffer {
+    if _, err := self.strbuff.WriteString(str); err != nil {
+        return nil
+    }
+    return self
+}
+
+func (self *StringBuffer) String() string {
+    return self.strbuff.String()
+}
+
+func (self *StringBuffer) Replace(oldstr, newstr string) string {
+    orgistr := self.String()
+    replacedstr := strings.Replace(orgistr, oldstr, newstr, -1)
+    self.strbuff.Reset()
+    self.strbuff.WriteString(replacedstr)
+    return replacedstr
+}
+
+func NewStringBuffer(initstr string) *StringBuffer {
+    sb := &StringBuffer{}
+    sb.init()
+    sb.Append(initstr)
+    return sb
+}
+
+func Popen(cmdstr string,  arg ...string) {
+    cmd := exec.Command(cmdstr, arg...)
+    log.Printf("%s", arg)
+    output, err := cmd.CombinedOutput()
+    if err != nil {
+        log.Printf("Popen failed, cmd: %s, error message:%s \n", cmdstr + " " + strings.Join(arg, " "), string(output))
+    }
+}
 
 func (self *Fileop) tobytearray(src string) []byte {
     return []byte(src)
@@ -46,7 +82,7 @@ func (self *Fileop) Createfile() {
         Popen("mkdir", "-p", dirname)
    }
 
-   Popen("cp", self.srcfile, self.destfile)
+   Popen("cp", "-f", self.srcfile, self.destfile)
    log.Printf("copy %s to %s ok\n", self.srcfile, self.destfile)
 }
 
